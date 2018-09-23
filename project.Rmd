@@ -112,6 +112,7 @@ renderValueBox({
   cr <- crInput()
   num <- round(mean(cr$amount, na.rm = T), 2)
   valueBox("Avg Cost Amount", value = num, icon = "fa-balance-scale", color = "blue")
+  # Woof, their blue is BRIGHT
 })
 ```
 
@@ -181,5 +182,5 @@ Row
 DT::renderDataTable({
   subset(crInput(), select = c(X_id, department_name, date_2018, cost_center_description, amount))
 })
-
+# Bleow here there should be a third page!
 ```
