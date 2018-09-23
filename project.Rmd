@@ -1,5 +1,5 @@
 ---
-title: "Starwars Flex Dashboard"
+title: "Cost & Revenue Dashboard"
 runtime: shiny
 output: 
   flexdashboard::flex_dashboard:
@@ -18,53 +18,47 @@ library(plotly)
 
 pdf(NULL)
 
-cost_rev_load <- read.csv('cost_rev.csv', header = TRUE)
-cost_rev <- as_tibble(cost_rev_load)
-cost_rev <- select(cost_rev_load, -ends_with("number"))
+cost_rev <- read.csv('cost_rev.csv', header = TRUE)
 
-cost_rev <- cost_rev_load %>%
+cost_rev_load <- cost_rev %>%
   filter(grepl("2018", general_ledger_date) )  %>%
     filter(grepl("GRANTS", object_account_description)|
             grepl("CDBG-CITY PLANNING",object_account_description)|
-              grepl("BOND PROCEEDS",object_account_description)) %>%
-  mutate(amount = as.numeric(amount),
-         department_name = as.character(department_name),
-         date_2018 = as.character(general_ledger_date),
-         cost_center_description = as.character(cost_center_description),
-         X_id = as.factor(X_id))
+              grepl("OPERATIONAL SUPPLIES",object_account_description)) %>%
+                mutate(amount = as.numeric(amount),
+                       department_name = as.character(department_name),
+                       date_2018 = as.Date(general_ledger_date, "%Y-%m-%d"),
+                       cost_center_description = as.character(cost_center_description),
+                       fund = as.character(fund_description),
+                       X_id = as.factor(X_id))
 
 
 crInput <- reactive({
-  cost_rev <- cost_rev %>% 
+  cost_rev <- cost_rev_load %>% 
   #Slider filter
-    filter(date_2018 >= input$DateSelect[1] & date <= input$DateSelect[2])
+    filter(amount >= input$AmountSelect[1] & amount <= input$AmountSelect[2])
   #Department Filter
   if (length(input$DepartmentSelect) > 0) {
     cost_rev <- subset(cost_rev, department_name %in% input$DepartmentSelect)
   }
   #Account Filter
-  if (length(input$AccountSelct) > 0 ) {
-    cost_rev <- subset(cost_rev, object_account_description %in% input$AccountSelct)
-  }
-  #Amount Filter
-  if (length(input$AmountSelct) > 0 ) {
-    cost_rev <- subset(cost_rev, amount %in% input$AmountSelct)
+  if (length(input$AccountSelect) > 0 ) {
+    cost_rev <- subset(cost_rev, object_account_description %in% input$AccountSelect)
   }
   #Date Filter
-  if (length(input$DateSelct) > 0 ) {
-    cost_rev <- subset(cost_rev, date_2018 %in% input$DateSelct)
-  }
+  if (length(input$FundSelect) > 0 ) {
+  cost_rev <- subset(cost_rev, fund_description %in% input$FundSelect)
+   }
+  
   return(cost_rev)
 })
 
-#Reactive melted data
-crInput <- reactive({
-  crInput() %>%
-    melt(id = "X_id")
-})
 
-
-
+# Reactive melted data
+  mcrInput <- reactive({
+    crInput() %>%
+      melt(id = "X_id")
+  })
 ```
 
 
@@ -73,33 +67,33 @@ Sidebar {.sidebar}
 
 ```{r}
 # Department Selction
-selectInput("DpartmentSelect",
+selectInput("DepartmentSelect",
             "Department Name:",
-            choices = sort(unique(cost_rev$department_name)),
+            choices = sort(unique(cost_rev_load$department_name)),
             multiple = TRUE,
             selectize = TRUE,
             selected = c("Department of Finance", "DPW-Operations","DPS-Police"))
 
-# General ledger Date Select
-selectInput("DateSelect",
-            "Date:",
-            choices = sort(unique(cost_rev$date_2018)),
+#fund Select
+selectInput("FundSelect",
+            "Fund:",
+            choices = sort(unique(cost_rev_load$fund_description)),
             multiple = TRUE,
             selectize = TRUE,
-            selected = c("2018-01-04", "2018-01-05", "2018-01-08", "2018-01-09", "2018-01-10"))
+            selected = c("GENERAL FUND","SPECIAL PKS PROG/GREAT RACE", "SENIOR CITIZENS PROG TF"))
 
 # Account Selection
 checkboxGroupInput("AccountSelect",
                    "Account Size:",
-                   choices = sort(unique(cost_rev$object_account_description)),
-                   selected = c("GRANTS","CDBG-CITY PLANNING","BOND PROCEEDS"))
+                   choices = sort(unique(cost_rev_load$object_account_description)),
+                   selected = c("GRANTS","CDBG-CITY PLANNING","OPERATIONAL SUPPLIES"))
                               
 # Amount Selection
 sliderInput("AmountSelect",
             "Amount:",
-            min = min(cost_rev$amount, na.rm = TRUE),
-            max = max(cost_rev$amount, na.rm = TRUE),
-            value = c(min(cost_rev$amount), max(cost_rev$amount, na.rm = TRUE)),
+            min = min(cost_rev_load$amount, na.rm = TRUE),
+            max = max(cost_rev_load$amount, na.rm = TRUE),
+            value = c(min(cost_rev_load$amount,na.rm = TRUE), max(cost_rev_load$amount, na.rm = TRUE)),
             step = 1)                              
                               
 
@@ -121,7 +115,7 @@ renderValueBox({
 })
 ```
 
-###
+### Department selected
 
 ```{r}
 renderGauge({
@@ -131,7 +125,8 @@ renderGauge({
 })
 
 ```
-###
+
+ Account selected
 
 ```{r}
 renderGauge({
@@ -146,22 +141,29 @@ renderGauge({
 Row {.tabset .tabset-fade}
 -------------------------------------
 
-### Cost Amount
+### Barplot for Department Name
 
 ```{r}
 renderPlotly({
   dat <- crInput()
-  ggplot(data = dat, aes(x = department_name)) + geom_bar() + 
-    guides(color = FALSE)
+   ggplotly(
+      ggplot(data = dat, aes(x = department_name, fill = as.factor(department_name))) + 
+        geom_bar() +
+        labs(x = "Department Names", title = "Barplot for Department Name") +
+        guides(color = FALSE))
 })
 ```
 
-### cost for each date in 2018
+### Point plot for Department Names and Cost Amount
 
 ```{r}
 renderPlotly({
-  dat <- subset(crInput(), variable == "date_2018")
-  ggplot(data = dat, aes(x = DateSelect, y = as.numeric(value), fill = DateSelect)) + geom_points()
+  dat <- crInput()
+  ggplotly(
+    ggplot(data = dat, aes(x = department_name, y = amount)) + 
+      geom_boxplot() +
+      labs(x = " Department Names", y = "Cost Amount", title = "Boxplot for Department Names and Cost Amount") +
+      guides(color = FALSE))
 })
 
 
@@ -179,6 +181,5 @@ Row
 DT::renderDataTable({
   subset(crInput(), select = c(X_id, department_name, date_2018, cost_center_description, amount))
 })
-
 
 ```
